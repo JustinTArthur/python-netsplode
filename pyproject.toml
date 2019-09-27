@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "netsplode"
+version = "0.1.0"
+description = "Connection destruction toolkit for Python. Helps test resilience to disconnection events."
+authors = ["Justin Turner Arthur"]
+
+[tool.poetry.dependencies]
+python = "^3.6"
+scapy = "^2.4.3"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.1.3"
+
+[tool.poetry.plugins."pytest11"]
+"netsplode" = "netsplode.pytest_plugin.py"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
