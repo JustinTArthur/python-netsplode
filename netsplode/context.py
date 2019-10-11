@@ -16,10 +16,10 @@ def _reset_connections(connections, blocking=True):
             target=_reset_connections,
             args=(connections,),
             kwargs={'blocking': True}
-        ).run()
+        ).start()
 
 
-class Netsploder:
+class ConnectionTracker:
     def __init__(self):
         self._client_tcp_connections = set()
         self._server_tcp_connections = set()
@@ -52,42 +52,49 @@ class Netsploder:
 
 
 @contextmanager
-def create_netsploder():
-    context = Netsploder()
+def track_connections():
+    tracker = ConnectionTracker()
 
-    class NetsplodeConnectionsCollectingSocket(socket.socket):
+    class NetsplodeConnectionsTrackingSocket(socket.socket):
         def accept(self):
             conn, address = super().accept()
             if conn.proto == socket.IPPROTO_TCP:
-                context.add_server_tcp_connection(conn)
+                tracker.add_server_tcp_connection(conn)
             return conn, address
 
         def connect(self, *args, **kwargs):
-            retval = super().connect(*args, **kwargs)
+            try:
+                retval = super().connect(*args, **kwargs)
+            except BlockingIOError:
+                # async runners often start the socket as non-blocking
+                # and then use select/poll mechanisms to check for success later
+                if self.proto == socket.IPPROTO_TCP:
+                    tracker.add_client_tcp_connection(self)
+                raise
             if self.proto == socket.IPPROTO_TCP:
-                context.add_client_tcp_connection(self)
+                tracker.add_client_tcp_connection(self)
             return retval
 
         def connect_ex(self, *args, **kwargs):
             retval = super().connect_ex(*args, **kwargs)
             if self.proto == socket.IPPROTO_TCP:
-                context.add_client_tcp_connection(self)
+                tracker.add_client_tcp_connection(self)
             return retval
 
         def shutdown(self, how: int) -> None:
             retval = super().shutdown(how)
             if how == socket.SHUT_RDWR:
-                context.remove_tcp_connection(self)
+                tracker.remove_tcp_connection(self)
             return retval
 
         def close(self, *args, **kwargs):
             retval = super().close()
-            context.remove_tcp_connection(self)
+            tracker.remove_tcp_connection(self)
             return retval
 
     original_socket = socket.socket
-    socket.socket = NetsplodeConnectionsCollectingSocket
+    socket.socket = NetsplodeConnectionsTrackingSocket
     try:
-        yield context
+        yield tracker
     finally:
         socket.socket = original_socket

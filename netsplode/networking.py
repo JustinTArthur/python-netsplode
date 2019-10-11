@@ -1,11 +1,12 @@
 import asyncio
 import logging
 import socket
+from ipaddress import ip_address
 from threading import Thread
 from time import sleep
 from typing import Union, Any, Optional, Sequence
 
-from scapy.all import conf as scapy_conf, send, sniff, IP, IPv6, TCP
+from scapy.all import conf as scapy_conf, send, sniff, IP, IPv6, TCP, LOOPBACK_INTERFACE
 
 logger = logging.getLogger(__name__)
 
@@ -128,11 +129,26 @@ def capture_tcp_frame_between_peers(
     pkt_filter = f'tcp and (({combo1}) or ({combo2}))'
 
     logger.debug(f'Sniffing for: {pkt_filter}')
-    frames = sniff(filter=pkt_filter, timeout=timeout)
+    if is_loopback_conversation(peer1, peer2):
+        frames = sniff(
+            count=1,
+            iface=LOOPBACK_INTERFACE,
+            filter=pkt_filter,
+            timeout=timeout
+        )
+    else:
+        frames = sniff(
+            count=1,
+            filter=pkt_filter,
+            timeout=timeout
+        )
     return frames[0] if len(frames) > 0 else None
 
 
-def reset_tcp_stream_of_eth_frame(frame: Any, severity=3):
+def is_loopback_conversation(*peers):
+    return all(ip_address(peer[0]).is_loopback for peer in peers)
+
+def reset_tcp_stream_of_eth_frame(frame: Any, severity=50):
     """
     Attempts to reset an ongoing TCP stream using RST injection.
     This technique is based on tcpkill from Dug Song's dsniff toolkit.

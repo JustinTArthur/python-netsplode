@@ -1,7 +1,7 @@
 import pytest
 import socket
 
-from netsplode.context import create_netsploder
+from netsplode.context import track_connections
 
 
 class CollectingSocket(socket.socket):
@@ -10,6 +10,6 @@ class CollectingSocket(socket.socket):
 
 @pytest.fixture
 def netsploder():
-    with create_netsploder() as context:
+    with track_connections() as context:
         yield context
 
